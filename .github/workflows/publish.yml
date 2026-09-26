@@ -1,0 +1,242 @@
+name: publish
+
+# Every push to main. What gets published — and whether anything does — is read from the
+# commits themselves by scripts/next-version.mjs:
+#
+#   feat: / fix: / perf:   → patch
+#   `!` or BREAKING CHANGE → major, or minor while the major is 0
+#   docs/ci/test/chore/…   → nothing at all
+#
+#   Release-As: 1.0.0      → that exact version, whatever the commits imply
+#   Release-As: minor      → that bump
+#
+# The third line is what makes this safe to run on every push: a documentation fix
+# publishes nothing, so the registry does not fill up with versions whose only difference
+# is a typo in a comment. The footer is how a developer overrules the derived number, and
+# it lives in the commit rather than in a workflow input so that `git log` answers "why is
+# there no 0.9?" six months later.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Work out the version and pack it, publish nothing"
+        type: boolean
+        default: true
+
+# One release at a time. Two pushes landing together would otherwise race for the same
+# version number, and one of them would lose in a way that reads as a broken pipeline.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Nothing reaches the registry that has not just passed everything. This duplicates the
+  # CI workflow deliberately: "CI was green on this commit" is a claim about a different
+  # workflow run that may still be in progress, and a publish that starts on that
+  # assumption is a publish that can beat its own tests.
+  verify:
+    runs-on: ubuntu-latest
+    name: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint, type-check, test and check the documentation links
+        run: npm run check
+      # The tarball as a consumer would receive it: installed into an empty project,
+      # imported and required through every entry in `exports`, type-checked in four
+      # resolutions, and with all sixteen course lessons run against it.
+      - name: The packed package works
+        run: npm run check:package
+      - name: The performance budgets still hold
+        run: npm run bench:guard
+      # A runner is always UTC, so a rule that quietly depends on where the process runs
+      # would pass here forever. Eucla is +08:45, which catches a half-hour offset as well
+      # as a whole-hour one, and the date rules are the part of this language it is for.
+      - name: The tests pass somewhere that is not UTC
+        run: npm test
+        env:
+          TZ: Australia/Eucla
+      - name: This library depends on nothing
+        run: |
+          count=$(node -p "Object.keys(require('./package.json').dependencies ?? {}).length")
+          test "$count" -eq 0
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    name: publish
+    permissions:
+      # The version bump and its tag are committed back to main.
+      contents: write
+      # Provenance: npm records in a public transparency log which workflow, in which
+      # repository, built this exact tarball from which commit. It is also what npm's
+      # trusted publishing uses, so configuring this repository as a trusted publisher on
+      # npmjs.com later needs no change here beyond dropping the secret.
+      id-token: write
+    steps:
+      # The full history, because the version is derived from the commits since the last
+      # release tag. A shallow clone would see one commit and conclude there was nothing to
+      # release.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing wants npm 11.5.1 or newer, and the runner's npm is older than
+      # that for a while after each release.
+      - run: npm install -g npm@latest
+
+      - run: npm ci
+
+      - name: Work out the version
+        id: version
+        run: |
+          next=$(node scripts/next-version.mjs --explain)
+          if [ -z "$next" ]; then
+            echo "Nothing here changes what the library does. No release." >> "$GITHUB_STEP_SUMMARY"
+            echo "release=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=yes" >> "$GITHUB_OUTPUT"
+            echo "version=$next" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Three different problems with three different fixes, and the publish step cannot
+      # tell them apart from the registry's error code. Said here instead, before any work.
+      - name: Check the npm credentials
+        if: steps.version.outputs.release == 'yes'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "::error::NPM_TOKEN is empty. An organisation secret is not visible to a repository until that repository is on the secret's access list."
+            exit 1
+          fi
+          if ! who=$(npm whoami 2>&1); then
+            echo "::error::npm rejected the token: ${who}. It is missing or expired."
+            exit 1
+          fi
+          echo "authenticated as ${who}"
+          # `npm whoami` proves the token is valid and proves nothing about whether it may
+          # publish: on an account with 2FA, a token without the bypass authenticates fine
+          # and is refused at the PUT with a 403. There is no cheap way to check that up
+          # front, so say it here rather than let the last step be a mystery.
+          echo "::notice::publishing from CI needs a granular access token with 'Bypass two-factor authentication' and write access to the @osqd scope."
+
+      # Makes a re-run safe, and catches a tag deleted by hand. A published version is
+      # immutable, so publishing over one is an error rather than a no-op.
+      - name: That version is not already published
+        if: steps.version.outputs.release == 'yes'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          name=$(node -p "require('./package.json').name")
+          if npm view "$name@$VERSION" version >/dev/null 2>&1; then
+            echo "::error::$name@$VERSION is already on the registry"
+            exit 1
+          fi
+
+      # The version is set here and nowhere else yet: written into package.json and the
+      # lockfile, and not committed, tagged or pushed. That waits until the package is on
+      # the registry.
+      #
+      # `npm version` would commit and tag in one step, and doing that before the publish
+      # is how this organisation's other packages stranded releases — a tag and a release
+      # commit on main for a version the registry never received. The next version is
+      # derived from the last tag, so a stranded one blocks every release after it until
+      # somebody notices.
+      - name: Set the version
+        if: steps.version.outputs.release == 'yes'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version
+
+      - name: Publish (dry run)
+        if: steps.version.outputs.release == 'yes' && github.event_name == 'workflow_dispatch' && inputs.dry-run
+        run: npm publish --provenance --access public --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # `prepublishOnly` builds, so what is packed is built from this commit at this
+      # version rather than from whatever was in dist.
+      - name: Publish
+        if: steps.version.outputs.release == 'yes' && (github.event_name == 'push' || !inputs.dry-run)
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Only now, and only for a real publish, does anything reach the remote.
+      #
+      # The branch goes first and the tag is made only once it has landed, so a tag can only
+      # ever name a commit that is on main. `git push --follow-tags` sends the branch and
+      # the tag as separate updates, and when the branch is refused the tag goes through
+      # anyway — pointing at a release commit that never arrived. That is the ordering bug
+      # this step exists to avoid, and a retry cannot repair it, since an existing remote
+      # tag is not moved by a plain push.
+      #
+      # A push made while this ran — somebody's next commit — is handled by replaying the
+      # release commit on top of theirs. It touches only the version fields, so it rebases
+      # cleanly unless somebody changed the version by hand.
+      #
+      # If every attempt fails, the package is published and only its commit and tag are
+      # missing. That is loud rather than silent: the next run derives the same version,
+      # finds it on the registry, and stops with an error naming it. `[skip ci]` is belt and
+      # braces — a push made with GITHUB_TOKEN does not trigger workflows at all.
+      - name: Commit, tag and push the release
+        if: steps.version.outputs.release == 'yes' && (github.event_name == 'push' || !inputs.dry-run)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "release: $VERSION [skip ci]"
+          # Anything else the build touched is not part of a release commit, and must not be
+          # what stops one landing either.
+          if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+            echo "::warning::the build changed tracked files outside the release commit; setting them aside:"
+            git status --short --untracked-files=no
+            git stash push --quiet
+          fi
+          landed=no
+          for attempt in 1 2 3 4 5; do
+            if git push; then landed=yes; break; fi
+            echo "::warning::push $attempt was refused; replaying the release commit on top of main"
+            # Not allowed to end the step: the shell runs with -e, so a failed rebase would
+            # exit on the spot and the message below — the one that says what to do — would
+            # never be printed.
+            if ! git pull --rebase; then
+              git rebase --abort 2>/dev/null || true
+              echo "::warning::could not replay the release commit on attempt $attempt"
+            fi
+          done
+          if [ "$landed" != yes ]; then
+            echo "::error::$VERSION is published, but its release commit could not be pushed. Push it and tag it v$VERSION by hand: the next release is derived from that tag."
+            exit 1
+          fi
+          git tag -a "v$VERSION" -m "v$VERSION"
+          git push origin "v$VERSION"
+
+      - name: Say what happened
+        if: steps.version.outputs.release == 'yes' && (github.event_name == 'push' || !inputs.dry-run)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "### Published \`@osqd/jql@$VERSION\`"
+            echo ""
+            echo "<https://www.npmjs.com/package/@osqd/jql/v/$VERSION>"
+          } >> "$GITHUB_STEP_SUMMARY"

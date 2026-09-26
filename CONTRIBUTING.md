@@ -77,6 +77,61 @@ scripts/            bench, bench guard, package check, link check, the CommonJS 
 - **A change to what an existing query matches is a major version of the language**, and needs
   the specification, the conformance suite and the changelog changed together.
 
+## Releasing
+
+There is no release ritual. **Every push to `main` publishes**, and the version comes from
+the commits: `.github/workflows/publish.yml` runs `scripts/next-version.mjs`, which reads
+everything since the last `v*` tag.
+
+| In a commit | To the version |
+| --- | --- |
+| `feat:` `fix:` `perf:` | patch |
+| a `!` in the type, or a `BREAKING CHANGE:` footer | major — or minor while the major is 0 |
+| `docs:` `ci:` `test:` `chore:` `build:` `refactor:` `style:` | nothing; the push publishes nothing at all |
+
+A feature is a patch here, which is not what Conventional Commits says. Under the usual rule
+a fortnight of ordinary work is a fortnight of minor bumps, and the number ends up measuring
+how often somebody pushed. The smallest bump that still publishes is the default, and a
+bigger one is claimed out loud.
+
+### Saying it yourself
+
+A footer on any commit in the range overrules the derived number, and the newest one wins:
+
+```
+feat(core): freeze the request envelope
+
+Release-As: 1.0.0
+```
+
+`Release-As: 1.0.0` publishes exactly that; `Release-As: minor` (or `major`, or `patch`)
+forces that bump. It is a footer rather than a workflow input so that the decision sits in
+the history next to the work — six months later `git log` answers "why is there no 0.9?".
+A footer that is not a version or a bump, or that does not move forwards, **stops the
+release** rather than quietly falling back to the derived number.
+
+The rules are in `tests/next-version.test.ts`, because a mistake there is not a red build —
+it is a wrong version on a registry that cannot take it back.
+
+### What happens on a push
+
+`verify` runs `npm run check`, `npm run check:package`, `npm run bench:guard`, the tests
+again under a non-UTC clock, and an assertion that the package still has no dependencies.
+Only then does `publish` set the version, publish with provenance, and *afterwards* commit
+`release: x.y.z [skip ci]` and tag `vx.y.z`. That order is deliberate: a tag that names a
+version the registry never received blocks every release after it, because the next version
+is derived from the last tag.
+
+`workflow_dispatch` runs the same thing with `dry-run` on by default, which works out the
+version and packs it without publishing.
+
+### The language's version is not this one
+
+`docs/reference/specification.md` carries its own version — the language is at 1.1 — and it
+moves only when the specification, the conformance suite and the changelog move together.
+The package version says which build of the engine you installed. A release that changes
+what a query matches has to do both, and the `!` above is how it says so to npm.
+
 ## Commits
 
 Conventional prefixes with a scope (`feat(text):`, `fix(core):`, `docs(spec):`), lowercase
