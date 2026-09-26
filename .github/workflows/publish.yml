@@ -69,6 +69,19 @@ jobs:
         run: |
           count=$(node -p "Object.keys(require('./package.json').dependencies ?? {}).length")
           test "$count" -eq 0
+      # Provenance is signed with the repository this workflow runs in, and the registry
+      # refuses the upload if `repository.url` does not name that same repository. Without
+      # this the mismatch is found at the very last step, after the tarball is built and
+      # the provenance statement is already in the public transparency log — which is how
+      # 0.1.0 failed to go out. Checked here, it is a sentence before any work is done.
+      - name: The manifest names the repository provenance will be signed with
+        run: |
+          expected="https://github.com/${{ github.repository }}"
+          declared=$(node -p "(require('./package.json').repository?.url ?? '').replace(/^git\+/, '').replace(/\.git$/, '')")
+          if [ "$declared" != "$expected" ]; then
+            echo "::error::package.json says repository.url is '${declared:-<missing>}', and npm expects '$expected' to match the provenance statement. The publish would be refused with a 422."
+            exit 1
+          fi
 
   publish:
     needs: verify

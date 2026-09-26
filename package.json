@@ -13,6 +13,14 @@
   ],
   "author": "Michał Płatosz <platosz.michal@gmail.com>",
   "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OSQD-ts/JQL.git"
+  },
+  "homepage": "https://github.com/OSQD-ts/JQL#readme",
+  "bugs": {
+    "url": "https://github.com/OSQD-ts/JQL/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"
