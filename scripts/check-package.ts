@@ -238,8 +238,17 @@ export { first, found, partial, projected, named, text, filter };
   }
   process.stdout.write(`ok  the course: ${ran} examples run, ${checked} print what the pages say\n`);
 
-  const files = execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: root, encoding: "utf8" });
-  const listed = (JSON.parse(files) as { files: { path: string }[] }[])[0]?.files.map((file) => file.path) ?? [];
+  // `npm pack --json` reports one package two ways depending on the npm running it: an
+  // array of one entry up to npm 11, an object keyed by package name from npm 12. Reading
+  // only the first shape left `listed` empty on a newer npm, and the check then said
+  // "conformance/cases.json is not in the package" about a file that was plainly in it —
+  // a true failure for an untrue reason, which is the kind that costs an afternoon.
+  const packed: unknown = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: root, encoding: "utf8" }));
+  const entry = (Array.isArray(packed) ? packed[0] : Object.values(packed as Record<string, unknown>)[0]) as { files?: { path: string }[] } | undefined;
+  if (entry?.files === undefined) {
+    throw new Error(`npm pack --json reported a shape this script does not know how to read, so nothing here checked what the tarball holds:\n${JSON.stringify(packed).slice(0, 400)}`);
+  }
+  const listed = entry.files.map((file) => file.path);
   for (const required of [
     "conformance/cases.json",
     "docs/reference/specification.md",

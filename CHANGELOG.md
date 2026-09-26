@@ -113,6 +113,12 @@
   otherwise by example. Specification §6.3 now states the rule, two conformance cases pin it,
   and the guide shows the way to ask that question: a computed field holding the joined
   value, which is then one field like any other.
+- **The tarball check read one npm's output and not the next one's.** `npm pack --json`
+  reports a package as an array of one entry up to npm 11 and as an object keyed by package
+  name from npm 12, so on a newer npm the list of packed files came back empty and the check
+  announced that `conformance/cases.json` was not in the package — about a file that was
+  plainly in it. It reads either shape now, and refuses a third it does not recognise rather
+  than reporting every required file as missing.
 - **Two entry points carried two copies of the library.** Each was built on its own with code
   splitting off, so every entry inlined whatever it reached: twenty of twenty-seven source
   modules were compiled into more than one bundle, and an application importing `@osqd/jql`
