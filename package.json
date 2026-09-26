@@ -1,0 +1,128 @@
+{
+  "name": "@osqd/jql",
+  "version": "0.1.0",
+  "description": "JSON Query Language — one MongoDB-style query document for every place the OSQD projects filter data, with a zero-dependency TypeScript engine that compiles each query once into a plain predicate.",
+  "keywords": [
+    "query",
+    "json",
+    "filter",
+    "mongodb",
+    "search",
+    "predicate",
+    "typescript"
+  ],
+  "author": "Michał Płatosz <platosz.michal@gmail.com>",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "text": [
+        "./dist/text/index.d.ts"
+      ],
+      "global": [
+        "./dist/global.d.ts"
+      ],
+      "mongo": [
+        "./dist/targets/mongo.d.ts"
+      ],
+      "cli": [
+        "./dist/cli.d.ts"
+      ]
+    }
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./text": {
+      "import": {
+        "types": "./dist/text/index.d.ts",
+        "default": "./dist/text.js"
+      },
+      "require": {
+        "types": "./dist/cjs/text/index.d.ts",
+        "default": "./dist/text.cjs"
+      }
+    },
+    "./global": {
+      "import": {
+        "types": "./dist/global.d.ts",
+        "default": "./dist/global.js"
+      },
+      "require": {
+        "types": "./dist/cjs/global.d.ts",
+        "default": "./dist/global.cjs"
+      }
+    },
+    "./package.json": "./package.json",
+    "./mongo": {
+      "import": {
+        "types": "./dist/targets/mongo.d.ts",
+        "default": "./dist/mongo.js"
+      },
+      "require": {
+        "types": "./dist/cjs/targets/mongo.d.ts",
+        "default": "./dist/mongo.cjs"
+      }
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "sideEffects": [
+    "./dist/global.js",
+    "./dist/global.cjs"
+  ],
+  "files": [
+    "dist",
+    "docs",
+    "conformance",
+    "bin",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "npm run typecheck && npm run lint && npm test && npm run docs:check",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "docs:check": "node scripts/check-links.mjs",
+    "build": "tsup && tsc --emitDeclarationOnly && tsc -p tsconfig.cli.json && node scripts/cjs-types.mjs",
+    "build:watch": "tsup --watch",
+    "check:package": "npm run build && tsx scripts/check-package.ts",
+    "bench": "tsx --expose-gc scripts/bench.ts",
+    "bench:guard": "tsx scripts/bench-guard.ts",
+    "example": "tsx --tsconfig tsconfig.typecheck.json examples/basic.ts",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build",
+    "cli": "tsx src/cli-run.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.0",
+    "@types/node": "^26.3.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "bin": {
+    "jql": "./bin/jql.mjs"
+  }
+}

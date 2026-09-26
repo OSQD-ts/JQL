@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "types": ["node"],
+    "rootDir": ".",
+    "paths": {
+      "@osqd/jql": ["./src/index.ts"],
+      "@osqd/jql/text": ["./src/text/index.ts"],
+      "@osqd/jql/global": ["./src/global.ts"]
+    }
+  },
+  "include": ["src/**/*", "tests/**/*", "examples/**/*", "scripts/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

@@ -1,0 +1,12 @@
+{
+  // The command's declarations, emitted on their own because it is the one part of the
+  // package that speaks to Node — files, streams, argv — and the library's own tsconfig
+  // deliberately has no Node types, which is what proves the engine needs none.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "emitDeclarationOnly": true
+  },
+  "include": ["src/cli.ts"],
+  "exclude": ["dist", "node_modules"]
+}
