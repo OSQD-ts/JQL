@@ -131,6 +131,6 @@
     "vitest": "^4.1.11"
   },
   "bin": {
-    "jql": "./bin/jql.mjs"
+    "jql": "bin/jql.mjs"
   }
 }

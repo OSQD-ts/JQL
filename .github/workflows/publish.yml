@@ -48,6 +48,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # The same npm the publish job uses. The runner's default is older, and an older npm
+      # accepts manifest fields a newer one quietly rewrites — so verifying with one and
+      # publishing with the other checks the wrong thing.
+      - run: npm install -g npm@latest
       - run: npm ci
       - name: Lint, type-check, test and check the documentation links
         run: npm run check
@@ -69,6 +73,19 @@ jobs:
         run: |
           count=$(node -p "Object.keys(require('./package.json').dependencies ?? {}).length")
           test "$count" -eq 0
+      # npm normalises the manifest as it publishes and says what it changed in a warning
+      # nobody reads. 0.1.1 went out that way: `bin` was written `./bin/jql.mjs`, npm called
+      # it invalid and dropped the entry, and the published version has no `jql` command at
+      # all. A dropped field is exactly the failure this project refuses everywhere else, so
+      # it is a red build here instead of a warning in a log.
+      - name: The manifest is already what npm would publish
+        run: |
+          npm pkg fix
+          if ! git diff --quiet package.json; then
+            echo "::error::npm would rewrite package.json as it publishes. Run 'npm pkg fix' and commit the result:"
+            git --no-pager diff package.json
+            exit 1
+          fi
       # Provenance is signed with the repository this workflow runs in, and the registry
       # refuses the upload if `repository.url` does not name that same repository. Without
       # this the mismatch is found at the very last step, after the tarball is built and
