@@ -1,6 +1,6 @@
 {
   "name": "@osqd/jql",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "JSON Query Language — one MongoDB-style query document for every place the OSQD projects filter data, with a zero-dependency TypeScript engine that compiles each query once into a plain predicate.",
   "keywords": [
     "query",
