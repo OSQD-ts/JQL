@@ -256,6 +256,31 @@ export { first, found, partial, projected, named, text, filter };
     if (!listed.includes(required)) throw new Error(`${required} is not in the package`);
   }
   process.stdout.write(`ok  the tarball carries the specification and the conformance suite\n`);
+
+  // No module compiled into two entry points.
+  //
+  // Each entry used to be built on its own with splitting off, so every one of them inlined
+  // whatever it reached: twenty of twenty-seven source modules were in more than one bundle,
+  // and an application importing `@osqd/jql` and `@osqd/jql/global` — the documented way to
+  // get the array methods — loaded the engine twice. Nothing failed, which is why it lasted:
+  // it costs bytes and a second copy of every module-level value, and neither shows up in a
+  // test. The source maps say exactly which module went where, so the question is cheap to
+  // ask on every build.
+  const carries = new Map<string, string[]>();
+  for (const name of readdirSync(join(root, "dist")).filter((file) => file.endsWith(".js.map"))) {
+    const map = JSON.parse(readFileSync(join(root, "dist", name), "utf8")) as { sources: string[] };
+    for (const source of map.sources) {
+      const module = source.replace(/^(\.\.\/)+/, "");
+      if (!module.startsWith("src/")) continue;
+      carries.set(module, [...(carries.get(module) ?? []), name.replace(".js.map", "")]);
+    }
+  }
+  const twice = [...carries].filter(([, outputs]) => outputs.length > 1);
+  if (twice.length > 0) {
+    const worst = twice.map(([module, outputs]) => `  ${module} -> ${outputs.join(", ")}`).join("\n");
+    throw new Error(`${twice.length} source module(s) are compiled into more than one output, so a consumer of two entry points loads two copies:\n${worst}`);
+  }
+  process.stdout.write(`ok  the entry points share their code: ${carries.size} modules, none compiled twice\n`);
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }
