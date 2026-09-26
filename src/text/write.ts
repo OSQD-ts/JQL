@@ -1,4 +1,5 @@
 import { checkVocabulary, type FieldKind, type Vocabulary } from "../vocabulary.js";
+import { quote } from "./quote.js";
 import { EXISTS_TERM, EXPLICIT_COMPARISON, SET_TERM, type TextOptions } from "./parse.js";
 
 /**
@@ -332,17 +333,6 @@ function writeDate(value: unknown): string | undefined {
     if (typeof relative.$ahead === "string") return `+${relative.$ahead}`;
   }
   // Epoch milliseconds have no spelling: the box reads a bare number as text.
-  return undefined;
-}
-
-/** A value quoted the way it has to be for the parser to read it back whole. */
-function quote(value: string, inSet: boolean): string | undefined {
-  const plain = !/[\s()"'“”‘’]/.test(value) && !/^[-!$]/.test(value) && !(inSet && value.includes(","));
-  if (plain) return value;
-  if (!value.includes('"')) return `"${value}"`;
-  if (!value.includes("'")) return `'${value}'`;
-  // The syntax has no escape inside a quoted run, so a value holding both kinds cannot be
-  // written at all. Saying so is better than writing something that reads as less.
   return undefined;
 }
 

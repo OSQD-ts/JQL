@@ -60,8 +60,11 @@ describe("the specification", () => {
 });
 
 describe("numbers the prose states", () => {
-  it("counts the conformance cases correctly in the changelog", () => {
+  it("counts the conformance cases correctly wherever it states the number", () => {
+    // Two pages say it, and the course was the one that went stale when two cases were
+    // added: nothing reads a sentence in lesson 16 on the way past.
     expect(read("CHANGELOG.md")).toContain(`${suite.cases.length} matching cases and ${suite.requests.length} request`);
+    expect(read("docs/course/16-extending.md")).toContain(`${suite.cases.length} matching\ncases and ${suite.requests.length} request`);
   });
 
   it("lists the text operators the parser understands", () => {

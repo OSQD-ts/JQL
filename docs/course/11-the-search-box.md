@@ -310,8 +310,55 @@ for (const [typed, caret] of caretAt) {
 `from` and `to` are the span to replace, so inserting a completion does not disturb the rest
 of the input.
 
-The values come from the `values` you listed in the vocabulary. A field that can hold anything
-offers none, because guessing there would be inventing options rather than completing them.
+What comes back is written the way the parser reads it back. That matters the moment a value
+has a space in it:
+
+```js
+import { defineVocabulary } from "@osqd/jql";
+import { parseText, suggest } from "@osqd/jql/text";
+
+const STATES = defineVocabulary()({ fields: { status: { kind: "exact", values: ["open", "in progress"] } } });
+
+const [option] = suggest("status:in", 9, STATES).options;
+
+console.log("offered:", option);
+console.log("means  :", JSON.stringify(parseText(option, { vocabulary: STATES })));
+```
+
+```
+offered: status:"in progress"
+means  : {"status":{"$eq":"in progress","$options":"i"}}
+```
+
+Quoted, because `status:in progress` would parse as `status:in` **and** a loose search word —
+a different question, with nothing on screen to say so. A completion is text somebody presses
+Tab on without reading it, so one that changes the query is worse than no completion at all.
+
+### Values you only know at run time
+
+The values above came from the `values` you listed in the vocabulary — a closed set, decided
+when the vocabulary was written. Harbour's `who` field has no such set, and yet a console that
+has just drawn a table knows exactly which customers are on it:
+
+```js
+import { suggest } from "@osqd/jql/text";
+import { orders } from "./orders.mjs";
+import { ORDERS } from "./vocabulary.mjs";
+
+const onScreen = [...new Set(orders.map((order) => order.customer.name))];
+
+console.log("with nothing given:", suggest("who:Ada", 7, ORDERS).options);
+console.log("with what we saw  :", suggest("who:Ada", 7, ORDERS, { values: { who: onScreen } }).options);
+```
+
+```
+with nothing given: []
+with what we saw  : [ 'who:"Ada Lovelace"', 'who:"Ada Byron"' ]
+```
+
+Without the values it offers nothing, because guessing there would be inventing options rather
+than completing them. Given them, it completes — and quotes the ones that need it. Declared
+values come first and the two merge, so a field can have both.
 
 ## Exercise
 

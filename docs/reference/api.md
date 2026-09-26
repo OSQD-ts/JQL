@@ -216,8 +216,21 @@ operator; did you mean "$gt"?`.
 | --- | --- |
 | `parseText(input, { vocabulary?, fields? })` | the search-box syntax to a JQL query; never throws |
 | `toText(query, { vocabulary?, fields? })` | the reverse: `{ text, complete, unexpressed }` |
-| `suggest(input, caret, vocabulary?)` | completions for the token under the caret, and the span they replace |
+| `suggest(input, caret, vocabulary?, { values? })` | completions for the token under the caret, and the span they replace |
 | `MAX_TEXT_CHARS`, `MAX_TEXT_DEPTH`, `TEXT_OPERATORS` | the caps and the operator words |
+
+`suggest` completes the token the caret is in and hands back the span to replace, so
+inserting one leaves the rest of the input alone. What it offers is **written the way the
+parser reads it back**: a value holding a space or a quote is quoted, and a value the syntax
+cannot write at all is left out rather than offered in a form that parses as something else.
+It keeps working inside a quote somebody has opened, and inside a `$in(…)` set, where it
+keeps the values already chosen.
+
+`values` is for the values a vocabulary cannot know when it is written — the statuses
+actually in the table, the owners actually on the rows. A vocabulary's own `values` is a
+closed set; this is what a console has just seen. Pass `{ values: { owner: [...] } }` and the
+field completes; leave it out and a field with no declared set still offers nothing, because
+guessing is inventing options rather than completing them. The two merge, declared first.
 
 `toText` is how a stored JSON filter gets back into a search box. It is deliberately not
 total — `$elemMatch`, `$glob`, `$size`, `$length` and `{ "$field": … }` have no spelling —

@@ -228,6 +228,8 @@
     { "group": "text", "name": "$text never reads a key as text", "documents": "people", "query": { "$text": "languages" }, "matches": [] },
     { "group": "text", "name": "$text in named fields only", "documents": "people", "query": { "$text": { "$search": "tor", "$fields": ["nick"] } }, "matches": [3] },
     { "group": "text", "name": "$text case-sensitive", "documents": "people", "query": { "$text": { "$search": "Tor", "$caseSensitive": true } }, "matches": [3] },
+    { "group": "text", "name": "a phrase is matched against one value, never across two", "documents": "people", "query": { "$text": "Lovelace London" }, "matches": [] },
+    { "group": "text", "name": "naming several fields does not join them either", "documents": "people", "query": { "$text": { "$search": "Lovelace London", "$fields": ["name", "address.city"] } }, "matches": [] },
     { "group": "text", "name": "an empty $text matches everything", "documents": "people", "query": { "$text": "" }, "matches": [0, 1, 2, 3] },
     { "group": "references", "name": "one field greater than another", "documents": "pairs", "query": { "out": { "$gt": { "$field": "in" } } }, "matches": [0, 5] },
     { "group": "references", "name": "one field equal to another, written as a value", "documents": "pairs", "query": { "out": { "$field": "in" } }, "matches": [2] },

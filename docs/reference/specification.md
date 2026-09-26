@@ -332,8 +332,15 @@ each still has to hold.
 { "$text": { "$search": "Tor", "$fields": ["nick", "name"], "$caseSensitive": true } }
 ```
 
-- The phrase is matched as a **substring**, ignoring case unless `$caseSensitive` is `true`.
-  Words are not split: `"new york"` does not match an item holding `york new`.
+- The phrase is matched as a **substring** of **one value**, ignoring case unless
+  `$caseSensitive` is `true`. Words are not split: `"new york"` does not match an item
+  holding `york new`.
+- Values are never joined before the phrase is matched against them, whether or not
+  `$fields` names several. An item whose `method` is `GET` and whose `path` is `/api/v2`
+  does not match the phrase `GET /api/v2`, because no single value holds it. A phrase that
+  has to span two fields is a question about a value neither of them holds, and the way to
+  ask it is to derive that value — a computed field that joins them, which is then one
+  field like any other.
 - Without `$fields`, every string anywhere in the item is searched, through objects and
   arrays. Keys are not searched.
 - Numbers are searched too, in their shortest round-trip decimal form, when the phrase

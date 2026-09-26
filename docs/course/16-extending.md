@@ -112,7 +112,7 @@ often added an escape hatch to do — and a query using them is still portable J
 
 ## Proving a filter before it meets anybody
 
-The language ships its own test suite as **data**: `conformance/cases.json`, 156 matching
+The language ships its own test suite as **data**: `conformance/cases.json`, 158 matching
 cases and 27 request cases. Each is a document set, a query, and the answer any implementation
 must give.
 

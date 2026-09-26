@@ -5,7 +5,7 @@
 ### Added
 
 - **The JSON Query Language, version 1.1.** A specification in `docs/reference/specification.md`
-  and a conformance suite in `conformance/cases.json` of 156 matching cases and 27 request
+  and a conformance suite in `conformance/cases.json` of 158 matching cases and 27 request
   cases that any implementation, in any language, must pass. The operator names are the
   conventional ones, and the array rules are written out in full rather than left to a
   reader's memory of another system. 1.1 is 1.0 plus `$glob`, `$length`, `{ "$field": … }`, relative dates and `omit`;
@@ -82,7 +82,44 @@
   against the packed tarball so they cannot drift from what the library does. Writing it found
   two defects, both listed below.
 
+- **`suggest` takes the values you have seen.** A vocabulary's `values` is a closed set,
+  decided when the vocabulary is written; plenty of fields have no such set and still have a
+  handful of values in practice, and the console that has just listed a thousand rows is the
+  only thing that knows them. `suggest(input, caret, vocabulary, { values: { owner: [...] } })`
+  completes from those. A field with neither still offers nothing, because guessing is
+  inventing options rather than completing them; declared values come first and the two
+  merge, and a name resolves through the vocabulary so an alias works.
+
 ### Fixed
+
+- **A completion could change the query it completed.** `suggest` offered a value exactly as
+  the vocabulary spelled it, so a field whose values hold a space completed `status:` to
+  `status:in progress` — which parses as `status:in` *and* a loose search word, a different
+  question with nothing on screen to say so. Completions are now written the way the parser
+  reads them back: quoted where they have to be, with the quote picked so it does not clash
+  with the value, and a value the syntax cannot write at all (one holding both kinds of
+  quote) left out rather than offered in a form that means less. The writer and completion
+  now share one copy of that rule, which is what let them disagree in the first place.
+- **Completion stopped the moment a quote was opened.** The token under the caret was found
+  by splitting on the last space, so `status:"in pro` looked like a fresh token `pro`
+  starting after the space: nothing was offered, and the span handed back would have cut the
+  input in half. It now replays the parser's own tokenizer, so the two agree about where a
+  token begins — and completion works inside an open quote and inside a `$in(…)` set, where
+  it keeps the values already chosen.
+- **A phrase spanning two fields was documented as something it never matched.** `$text`
+  matches a phrase against one value at a time and never joins values first, so
+  `"GET /api/v2"` finds nothing when `GET` is the `method` and `/api/v2` is the `path` — and
+  naming both in a vocabulary's `text` list does not change that. The reference said
+  otherwise by example. Specification §6.3 now states the rule, two conformance cases pin it,
+  and the guide shows the way to ask that question: a computed field holding the joined
+  value, which is then one field like any other.
+- **Two entry points carried two copies of the library.** Each was built on its own with code
+  splitting off, so every entry inlined whatever it reached: twenty of twenty-seven source
+  modules were compiled into more than one bundle, and an application importing `@osqd/jql`
+  and `@osqd/jql/global` — the documented way to get the array methods — loaded the engine
+  twice. They are built together now and share their code, which took the ES-module output
+  from 315 KB to 152 KB, and `check:package` reads the source maps and fails if any module
+  is ever compiled into two outputs again.
 
 - **A path longer than 64 segments matched but was left out of the result.** The engine
   followed a path to any depth while `fields` walked its own tree and stopped at sixty-four,

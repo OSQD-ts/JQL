@@ -9,5 +9,5 @@ export { suggest } from "./suggest.js";
 export { toText } from "./write.js";
 
 export type { TextOptions } from "./parse.js";
-export type { Suggestions } from "./suggest.js";
+export type { Suggestions, SuggestOptions } from "./suggest.js";
 export type { TextForm, Unexpressed } from "./write.js";

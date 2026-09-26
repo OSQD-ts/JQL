@@ -368,3 +368,128 @@ describe("completions", () => {
     }
   });
 });
+
+/**
+ * A completion is text somebody presses Tab on without reading it, so the only property
+ * worth testing is that what goes in means what it says. All three of these shipped broken:
+ * a value with a space was offered bare, so `status:` completed to `status:in progress` —
+ * which parses as `status:in` and a loose search word, a *different query* with nothing on
+ * screen to say so.
+ */
+describe("completing a value the syntax has to quote", () => {
+  const awkward = defineVocabulary()({
+    fields: {
+      status: { kind: "exact", values: ["open", "in progress", "won't fix", 'say "hi"', "both ' and \""] },
+      owner: { kind: "exact" },
+      note: {},
+    },
+    text: ["note"],
+  });
+
+  it("quotes a value that holds a space", () => {
+    expect(suggest("status:in", 9, awkward).options).toEqual(['status:"in progress"']);
+  });
+
+  it("picks a quote the value does not itself contain", () => {
+    expect(suggest("status:won", 10, awkward).options).toEqual(["status:\"won't fix\""]);
+    expect(suggest("status:say", 10, awkward).options).toEqual(["status:'say \"hi\"'"]);
+  });
+
+  it("leaves out a value the syntax cannot write at all", () => {
+    // Both kinds of quote and no escape between them. Offering it unquoted would complete
+    // the box with something that parses as less than it says.
+    expect(suggest("status:both", 11, awkward).options).toEqual([]);
+  });
+
+  /**
+   * Typing the opening quote yourself used to stop completion dead: the token was found by
+   * splitting on the last space, so `status:"in pro` looked like a fresh token `pro`, and
+   * the span offered to replace would have cut the input in half.
+   */
+  it("keeps completing after an opening quote, and replaces the whole token", () => {
+    for (const input of ['status:"', 'status:"in', 'status:"in pro', "status:'in pro"]) {
+      const { options, from, to } = suggest(input, input.length, awkward);
+      expect(options, input).toContain('status:"in progress"');
+      expect(input.slice(from, to), input).toBe(input);
+    }
+  });
+
+  it("offers nothing inside a phrase, which is not a field at all", () => {
+    // `"sta` is a search for text, and completing it to `"status:` would ask for documents
+    // holding the characters "status:".
+    expect(suggest('"sta', 4, awkward).options).toEqual([]);
+    expect(suggest('note:x "sta', 11, awkward).options).toEqual([]);
+  });
+
+  it("completes inside a set, keeping the values already chosen", () => {
+    const input = "status:$in(open, in pro";
+    const { options, from } = suggest(input, input.length, awkward);
+    expect(options).toEqual(['status:$in(open, "in progress"']);
+    expect(from).toBe(0);
+    expect(parseText(options[0] as string, { vocabulary: awkward })).toEqual({ status: { $in: ["open", "in progress"], $options: "i" } });
+  });
+
+  /**
+   * The property, over every value in the vocabulary and every prefix of it: what is
+   * offered, inserted, parses as a term on that field holding that value — and never as a
+   * loose text search, which is what an unquoted space turns into.
+   */
+  it("every completion, inserted, parses as the term it claims", () => {
+    for (const field of awkward.fields) {
+      for (const value of field.values ?? []) {
+        for (let cut = 0; cut <= value.length; cut++) {
+          for (const opener of ["", '"', "'"]) {
+            const input = `${field.name}:${opener}${value.slice(0, cut)}`;
+            const { options, from, to } = suggest(input, input.length, awkward);
+            for (const option of options) {
+              const inserted = input.slice(0, from) + option + input.slice(to);
+              const query = parseText(inserted, { vocabulary: awkward }) as unknown as Record<string, { $eq?: unknown }>;
+              expect(Object.keys(query), inserted).toEqual([field.name]);
+              expect(query[field.name]?.$eq, inserted).toBe(option.slice(`${field.name}:`.length).replace(/^(["'])([\s\S]*)\1$/, "$2"));
+            }
+          }
+        }
+      }
+    }
+  });
+});
+
+/**
+ * A vocabulary's `values` is a closed set, decided when the vocabulary is written. Plenty of
+ * fields have no such set and still have a handful of values in practice, and the console
+ * that has just listed a thousand rows is the only thing that knows them.
+ */
+describe("values seen at run time", () => {
+  const live = defineVocabulary()({
+    fields: {
+      owner: { kind: "exact", aliases: ["assignee"] },
+      status: { kind: "exact", values: ["open", "closed"] },
+    },
+  });
+
+  it("completes a field that declares no set, once it is given the values", () => {
+    expect(suggest("owner:", 6, live).options).toEqual([]);
+    expect(suggest("owner:", 6, live, { values: { owner: ["Ada Lovelace", "Grace Hopper"] } }).options).toEqual([
+      'owner:"Ada Lovelace"',
+      'owner:"Grace Hopper"',
+    ]);
+  });
+
+  it("merges them with a declared set, declared first, without repeating one", () => {
+    const options = suggest("status:", 7, live, { values: { status: ["closed", "stalled"] } }).options;
+    expect(options).toEqual(["status:open", "status:closed", "status:stalled"]);
+  });
+
+  it("finds the field through an alias, whichever name was typed", () => {
+    const values = { owner: ["Ada Lovelace"] };
+    expect(suggest("assignee:Ada", 12, live, { values }).options).toEqual(['assignee:"Ada Lovelace"']);
+  });
+
+  it("refuses a shape it cannot read rather than offering nothing", () => {
+    // Offering nothing is what a field with no values seen yet looks like, so a caller
+    // passing the wrong shape would have no way to tell the two apart.
+    expect(() => suggest("owner:", 6, live, { values: { owner: "Ada" } as never })).toThrow(/options\.values\.owner/);
+    expect(() => suggest("owner:", 6, live, { values: { owner: [1] } as never })).toThrow(/list of strings/);
+    expect(() => suggest("owner:", 6, live, { values: [] as never })).toThrow(/field names to lists of values/);
+  });
+});

@@ -22,7 +22,8 @@ import { checkVocabulary, type FieldKind, type Vocabulary, type VocabularyField 
  * at:>-1h                                  the last hour, and it stays the last hour
  * has:rule    -has:rule                    the field is set, or is not
  * (verdict:human $or score:<20) $and $not path:/health
- * "GET /api/v2/orders"                     a phrase, spaces and all
+ * "connection reset"                       a phrase, spaces and all — matched against one
+ *                                          value, never joined across two fields
  * ```
  *
  * **Adjacent terms mean AND**, which is what narrowing means. `$or` binds more loosely than

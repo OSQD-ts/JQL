@@ -28,13 +28,31 @@ parseText("actor:203.0.113.4 -path:/health score:>70", { vocabulary });
 | You type | Means | Becomes |
 | --- | --- | --- |
 | `checkout` | the text appears anywhere | `{ "$text": "checkout" }` |
-| `"GET /api/v2"` | a phrase, spaces and all | `{ "$text": "GET /api/v2" }` |
+| `"connection reset"` | a phrase, spaces and all | `{ "$text": "connection reset" }` |
 | `path:/api` | the field matches the value (how depends on the field's kind, below) | `{ "path": { "$contains": "/api", "$options": "i" } }` |
 | `-path:/health` or `!path:/health` | not | `{ "$not": { … } }` |
 | `path:$in(/a, /b)` | any of these | `{ "path": { "$contains": ["/a", "/b"], "$options": "i" } }` |
 | `path:$notin(/a, /b)` | none of these | `{ "$not": { "path": … } }` |
 | `has:rule` | the field has a value | `{ "rule": { "$exists": true } }` |
 | `-has:rule` | the field has none | `{ "$not": { "rule": { "$exists": true } } }` |
+
+A phrase is matched against **one value at a time**, and values are never joined first.
+`"connection reset"` finds a log line holding that text; `"GET /api/v2"` finds nothing at all
+when `GET` is the `method` field and `/api/v2` is the `path` field, because no single value
+holds the phrase — and naming both fields in the vocabulary's `text` list does not change
+that. To make that phrase askable, give the vocabulary a field that *is* the joined value:
+
+```ts
+const REQUESTS = defineVocabulary<Request>()({
+  fields: {
+    method: { kind: "exact", values: ["GET", "POST"] },
+    path: { kind: "word" },
+    // The value the phrase is actually about. Now `"GET /api/v2"` has something to match.
+    line: { kind: "word", get: (request) => `${request.method} ${request.path}` },
+  },
+  text: ["line"],
+});
+```
 
 Any quote works — `"…"`, `'…'`, and the curly `“…”` and `‘…’` that smart punctuation produces
 when a filter is pasted from chat or documentation. A single quote counts as a quote only
@@ -112,11 +130,28 @@ a person who has not finished typing.
 
 ## Completion
 
-`suggest(input, caret, vocabulary)` returns the completions for the token under the caret and
-the span they replace. Field names come from the vocabulary; a field with a closed set of
-`values` completes its values and offers `$in(` and `$notin(`; a token starting with `$`
-completes to an operator. A field that takes anything gets no suggestions, because guessing
-there would be inventing options rather than completing them.
+`suggest(input, caret, vocabulary?, options?)` returns the completions for the token under
+the caret and the span they replace. Field names come from the vocabulary; a field with a
+closed set of `values` completes its values and offers `$in(` and `$notin(`; a token starting
+with `$` completes to an operator.
+
+**What is offered, inserted, means what it says.** A value holding a space or a quote comes
+back quoted — `status:"in progress"`, not `status:in progress`, which would parse as
+`status:in` and a loose search word. A value the syntax cannot write at all (one holding both
+kinds of quote, with no escape between them) is left out rather than offered in a form that
+parses as less. Completion keeps working inside a quote you have opened and inside a
+`$in(…)` set, where it keeps the values already chosen.
+
+A field that declares no `values` offers nothing, because guessing there would be inventing
+options rather than completing them. When you *have* seen its values — the console has just
+listed a thousand rows — hand them over and it completes:
+
+```ts
+suggest(input, caret, vocabulary, { values: { owner: ownersOnScreen } });
+```
+
+Declared values come first and the two merge, so a field may have both. Names resolve through
+the vocabulary, so an alias works.
 
 ## Writing a query back out
 
